@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Question {{ idx + 1 }} of {{ total }}{% endblock %}
+{% block content %}
+
+  <div class="topbar">
+    <p class="eyebrow">{{ topic }} &middot; Question {{ idx + 1 }} / {{ total }}</p>
+    <p class="warning-badge" id="warning-badge">Warnings: {{ warnings }} / {{ warning_limit }}</p>
+  </div>
+
+  <div class="progress">
+    <div class="progress-fill" style="width: {{ ((idx) / total) * 100 }}%"></div>
+  </div>
+
+  <!-- Per-question timer, reusing the same progress-bar classes -->
+  <div class="progress" style="margin-bottom: 12px;">
+    <div class="progress-fill" id="timer-fill" style="width: 100%; background: var(--danger);"></div>
+  </div>
+
+  {% if not webcam_ok %}
+    <p class="error" id="webcam-warning">Camera preview unavailable{% if monitor_error %} ({{ monitor_error }}){% endif %} — continuing without a live preview.</p>
+  {% endif %}
+
+  <h1>{{ question }}</h1>
+
+  <form action="{{ url_for('answer', idx=idx) }}" method="post" class="stack" id="answer-form">
+    {% for option in options %}
+      <label class="option">
+        <input type="radio" name="option" value="{{ option }}" required>
+        <span>{{ option }}</span>
+      </label>
+    {% endfor %}
+    <button type="submit" class="btn">
+      {% if idx + 1 == total %}Finish{% else %}Next{% endif %}
+    </button>
+  </form>
+
+  <div class="camera-widget" id="camera-widget">
+    <!-- Fallback div that will show up ONLY on error -->
+    <div id="camera-error" class="camera-timeout-msg" style="display: none;">
+      <span>Stream Paused</span>
+    </div>
+
+    <img id="camera-feed" src="{{ url_for('video_feed') }}" alt="Live proctoring camera feed">
+    
+    <span class="camera-label">MONITORING</span>
+  </div>
+
+  <script>
+    const badge = document.getElementById("warning-badge");
+    const form = document.getElementById("answer-form");
+    const timerFill = document.getElementById("timer-fill");
+
+    // -- limit polling: end the quiz immediately on a mid-question breach --
+    async function pollMonitor() {
+      try {
+        const res = await fetch("{{ url_for('api_monitor_status') }}");
+        if (!res.ok) return;
+        const status = await res.json();
+        badge.textContent = `Warnings: ${status.warnings} / ${status.limit}`;
+        if (status.disqualified) {
+          window.location.href = "{{ url_for('result') }}";
+        }
+      } catch (e) {
+        // network hiccup - just try again on the next tick
+      }
+    }
+    const pollHandle = setInterval(pollMonitor, 2000);
+
+    // -- per-question countdown timer; auto-advances when it runs out --
+    const QUESTION_SECONDS = {{ question_seconds }};
+    let remaining = QUESTION_SECONDS;
+    let submitted = false;
+    let isNavigatingAway = false; // Tracks if user is intentionally leaving the page
+
+    function submitForm() {
+      if (submitted) return;
+      submitted = true;
+      isNavigatingAway = true; // Block violation triggers on auto-submit
+      
+      // If nothing was selected, submit anyway with a blank answer so the
+      // question is scored as skipped rather than trapping the candidate.
+      if (!form.querySelector('input[name="option"]:checked')) {
+        form.removeAttribute("novalidate"); // no-op, kept for clarity
+        const hidden = document.createElement("input");
+        hidden.type = "hidden";
+        hidden.name = "option";
+        hidden.value = "";
+        form.appendChild(hidden);
+        form.querySelectorAll('input[name="option"][required]').forEach(el => el.required = false);
+      }
+      form.submit();
+    }
+
+    const timerHandle = setInterval(() => {
+      remaining -= 1;
+      const pct = Math.max(0, (remaining / QUESTION_SECONDS) * 100);
+      timerFill.style.width = pct + "%";
+      if (remaining <= 0) {
+        clearInterval(timerHandle);
+        submitForm();
+      }
+    }, 1000);
+
+    form.addEventListener("submit", () => { 
+      submitted = true; 
+      isNavigatingAway = true; // Block violation triggers when clicking "Next" / "Finish"
+    });
+
+    // -- report tab switches / window blur as violations --
+    let lastViolationReportAt = 0;
+    function reportViolation(reason) {
+      if (isNavigatingAway) return; // Ignore blur if the page is transitioning natively
+      
+      const now = Date.now();
+      if (now - lastViolationReportAt < 5000) return; // cooldown so one switch = one warning
+      lastViolationReportAt = now;
+      fetch("{{ url_for('api_report_violation') }}", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      }).then(r => r.json()).then(data => {
+        if (data.status) {
+          badge.textContent = `Warnings: ${data.status.warnings} / ${data.status.limit}`;
+          if (data.status.disqualified) {
+            window.location.href = "{{ url_for('result') }}";
+          }
+        }
+      }).catch(() => {});
+    }
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) reportViolation("Switched away from the quiz tab");
+    });
+    window.addEventListener("blur", () => reportViolation("Quiz window lost focus"));
+
+    window.addEventListener("beforeunload", () => {
+      clearInterval(pollHandle);
+      clearInterval(timerHandle);
+    });
+
+    const feed = document.getElementById('camera-feed');
+    const errorBlock = document.getElementById('camera-error');
+
+    feed.onerror = function() {
+      // Hide the broken img element, display the clean fallback text
+      feed.style.display = 'none';
+      errorBlock.style.display = 'flex';
+      
+      // Try to re-establish the connection to your Flask backend video stream
+      setTimeout(() => {
+        feed.src = "{{ url_for('video_feed') }}?t=" + new Date().getTime();
+        feed.style.display = 'block';
+        errorBlock.style.display = 'none';
+      }, 4000);
+    };
+  </script>
+{% endblock %}

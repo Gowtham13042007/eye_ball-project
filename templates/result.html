@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Your Score{% endblock %}
+{% block content %}
+  <p class="eyebrow">{{ topic }} &middot; {{ difficulty|capitalize }}</p>
+
+  {% if warnings_exceeded %}
+    <h1 class="disqualified-title">You Are Cheating — Quiz Ended</h1>
+    <p class="error">
+      Suspicious activity was detected {{ warnings }} time(s), exceeding the allowed
+      limit of {{ warning_limit }}. This assessment has been terminated automatically.
+    </p>
+    <p class="subtitle">Score at the time the quiz was stopped:</p>
+  {% else %}
+    <h1>Quiz Complete</h1>
+  {% endif %}
+
+  <div class="score">
+    <span class="score-number">{{ score }}</span>
+    <span class="score-total">/ {{ total }}</span>
+  </div>
+
+  {% if not warnings_exceeded %}
+    <p class="subtitle">
+      {% if score == total %}
+        Perfect score!
+      {% elif score >= (total / 2) %}
+        Nice work.
+      {% else %}
+        Keep practicing.
+      {% endif %}
+    </p>
+  {% endif %}
+
+  {% if answers %}
+    <p class="eyebrow" style="margin-top: 20px;">Review</p>
+    <div class="stack">
+      {% for a in answers %}
+        <div class="option" style="cursor: default; align-items: flex-start; flex-direction: column; gap: 4px;">
+          <span>{{ loop.index }}. {{ a.question }}</span>
+          {% if a.is_correct %}
+            <span style="color: var(--text); font-size: 0.85rem;">Your answer: {{ a.selected }} &mdash; correct</span>
+          {% else %}
+            <span style="color: var(--danger); font-size: 0.85rem;">
+              Your answer: {{ a.selected or "No answer (time ran out)" }} &mdash; correct answer: {{ a.correct }}
+            </span>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {% if history %}
+    <p class="eyebrow" style="margin-top: 20px;">Warning log</p>
+    <div class="stack">
+      {% for h in history %}
+        <div class="option" style="cursor: default; align-items: flex-start; flex-direction: column; gap: 2px;">
+          <span style="color: var(--danger); font-size: 0.85rem; font-weight: 700;">Warning {{ h.warning }}: {{ h.reasons|join(", ") }}</span>
+          <span style="color: var(--muted); font-size: 0.8rem;">{{ h.time }}</span>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <a href="{{ url_for('restart') }}" class="btn" style="margin-top: 20px;">Try Another Topic</a>
+{% endblock %}

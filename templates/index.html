@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Choose a Topic{% endblock %}
+{% block content %}
+  <h1>Pick a topic</h1>
+  <p class="subtitle">We'll generate questions for you, one at a time. Your webcam will monitor attention while you answer.</p>
+
+  {% if error %}
+    <p class="error">{{ error }}</p>
+  {% endif %}
+
+  <form action="{{ url_for('generate') }}" method="post" class="stack">
+    <input type="text" name="topic" placeholder="e.g. Photosynthesis, World War II, Python..." required autofocus>
+
+    <p class="eyebrow" style="margin-top: 10px;">Difficulty</p>
+    <label class="option">
+      <input type="radio" name="difficulty" value="easy">
+      <span>Easy</span>
+    </label>
+    <label class="option">
+      <input type="radio" name="difficulty" value="medium" checked>
+      <span>Medium</span>
+    </label>
+    <label class="option">
+      <input type="radio" name="difficulty" value="hard">
+      <span>Hard</span>
+    </label>
+
+    <p class="eyebrow" style="margin-top: 10px;">Number of questions</p>
+    <label class="option">
+      <input type="radio" name="num_questions" value="3">
+      <span>3 questions</span>
+    </label>
+    <label class="option">
+      <input type="radio" name="num_questions" value="5" checked>
+      <span>5 questions</span>
+    </label>
+    <label class="option">
+      <input type="radio" name="num_questions" value="7">
+      <span>7 questions</span>
+    </label>
+
+    <button type="submit" class="btn" style="margin-top: 10px;">Generate Quiz</button>
+  </form>
+{% endblock %}
